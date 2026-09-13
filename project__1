@@ -1,0 +1,210 @@
+import pandas as pd
+import pymysql
+from sqlalchemy import create_engine
+
+csv_path = r"D:\Vscode\earthquake_cleandata.csv"
+
+try:
+    df = pd.read_csv("D:\Vscode\earthquake_cleandata.csv")
+
+    print("\nCSV file loaded successfully!")
+    print("Number of rows:", len(df))
+    print("Number of columns:", len(df.columns))
+
+except Exception as e:
+    print("\nCSV file loading failed:", e)
+    exit()
+
+print("\nColumns in CSV:")
+print(df.columns.tolist())
+
+try:
+
+    connection = pymysql.connect(
+        host="localhost",
+        port=3306,
+        user="root",
+        password="prakash0510",
+        database="firstprojectdb",
+        cursorclass=pymysql.cursors.DictCursor
+
+    )
+    print("\n  connected to Mysql sucessfully")
+
+except Exception as e:
+
+    print("\n connection failed",e)
+
+engine = create_engine("mysql+pymysql://root:prakash0510@localhost/firstprojectdb")
+
+try:
+
+    with engine.connect() as conn:
+        print("SQLALchemy connection sucessful")
+
+except Exception as e:
+
+    print("SQLALchemy connection failed ",e)
+try:
+    df.to_sql(
+        name="earth_quake",
+        con=engine,
+        if_exists="append",
+        index=False
+
+    )
+
+    print("\n data inserted sucessfully")
+
+except Exception as e:
+
+    print("\n data insertion failed",e)
+
+queries={
+    "1.Top 10 Strongest earthquakes":
+    """
+       SELECT * FROM earth_quake ORDER BY mag DESC LIMIT 10;
+    """,
+    "2.Top 10 deepest earthquakes":
+    """
+       SELECT * FROM earth_quake ORDER BY depth_km DESC LIMIT 10;
+    """,
+    "3. Shallow earthquakes < 50 km and mag > 7.5.":
+    """
+       SELECT * FROM earth_quake WHERE depth_km < 50 AND mag > 7.5
+    """,
+    "5. Average magnitude per magnitude type (magType)" :
+    """
+      SELECT magType, AVG(mag) FROM earth_quake GROUP BY magType;
+    """,
+    "6. Year with most earthquakes.":
+    """
+      SELECT year(time) as year,count(*) as total from earth_quake
+       group by year(time) order by total desc limit 1;
+    """,
+    "7. Month with highest number of earthquakes.":
+    """
+       SELECT month(time) as month,count(*) as total from earth_quake group by month(time) order by total desc limit 1;
+    """,      
+    "8. Day of week with most earthquakes.":
+    """
+       SELECT dayname(time) as day,count(*) as total from earth_quake group by dayname(time) order by total desc limit 1;
+    """,
+    "9.Count of earthquakes per hour of day.":
+    """
+       SELECT hour(time) as hour,count(*) as total from earth_quake group by hour(time) order by hour; 
+    """,
+    "10.Most active reporting network (net).":
+    """
+       SELECT net, COUNT(*) AS total FROM earth_quake GROUP BY net ORDER BY total DESC LIMIT 1;
+    """,
+    "11.Top 5 places with highest casualties.":
+    """
+       SELECT place,MAX(felt) as casulaties FROM earth_quake group by place order by casulaties DESC LIMIT 5;
+    """,
+    "13.Average economic loss by alert level.":
+    """
+       SELECT alert,count(*) as count FROM earth_quake GROUP BY alert;
+    """,
+    "14.Count of reviewed vs automatic earthquakes (status).":
+    """
+       SELECT status,count(*) as count FROM earth_quake GROUP BY status;
+    """,
+    "15.Count by earthquake type (type).":
+    """
+       SELECT type,count(*) as count FROM earth_quake GROUP BY type;
+    """,
+    "16.Number of earthquakes by data type (types)":
+    """
+       SELECT types,Count(*) as count FROM earth_quake GROUP BY types;
+    """,
+    "18.Events with high station coverage (nst > threshold).":
+    """
+       SELECT * FROM earth_quake WHERE nst > 50;
+    """,
+    "19.Number of tsunamis triggered per year.":
+    """
+       SELECT year(time),count(*) as tsunami from earth_quake where tsunami = 1 group by year(time); 
+    """,
+    "20.Count earthquakes by alert levels (red, orange, etc.).":
+    """
+       SELECT alert,count(*) as total from earth_quake group by alert;
+    """,
+    "21.Find the top 5 countries with the highest average magnitude of earthquakes in the past 5 years":
+    """
+       SELECT place,avg(mag) as avg_mag from earth_quake group by place order by avg_mag desc limit 5; 
+    """,
+
+    "22.Find countries that have experienced both shallow and deep earthquakes within the same month.":
+    """
+       SELECT place from earth_quake group by place, year(time), month(time) having sum(depth_km < 70) and sum(depth_km > 300);
+    """,
+
+    "23.Compute the year-over-year growth rate in the total number of earthquakes globally.":
+    """
+        select 
+           year,total,lag(total) over (order by year) as previousyear,
+           round(((total - lag(total) over (order by year))/ lag(total) over (order by year)) * 100,2) as growth_rate
+        from ( select year(time) as year, count(*) as total from earth_quake group by year(time)) as yearly; 
+
+    """,
+    "24.List the 3 most seismically active regions by combining both frequency and average magnitude.":
+    """
+        select place,count(*) as frequency, avg(mag) as avg_mag,(count(*) * avg(mag))as score
+        from earth_quake
+        group by place
+        order by score desc limit 3;
+    """,
+    "25.For each country, calculate the average depth of earthquakes within ±5° latitude range of the equator.":
+    """
+        SELECT place, AVG(depth_km) AS avg_depth FROM earth_quake
+        WHERE latitude BETWEEN -5 AND 5
+        GROUP BY place;
+    """,
+    " 26.Identify countries having the highest ratio of shallow to deep earthquakes.":
+    """
+        select place,
+            sum(depth_km < 70) as shallow,
+            sum(depth_km > 300) as deep,
+            sum(depth_km < 70) /  NULLIF(sum(depth_km > 300),0) as ratio
+        from earth_quake group by place order by ratio desc;
+
+    """,
+
+    "27.Find the average magnitude difference between earthquakes with tsunami alerts and those without":
+    """
+        SELECT
+              AVG(CASE WHEN tsunami = 1 THEN mag END) AS tsunami_avg,
+            AVG(CASE WHEN tsunami = 0 THEN mag END) AS no_tsunami_avg,
+            AVG(CASE WHEN tsunami = 1 THEN mag END)
+            - AVG(CASE WHEN tsunami = 0 THEN mag END) AS difference
+        FROM earth_quake;
+    """,
+
+
+    "28.Using the gap and rms columns, identify events with the lowest data reliability (highest average error margins)":
+    """
+        SELECT id,gap,rms,(gap+rms) as error_margin from earth_quake ORDER BY gap desc,rms desc limit 20;
+    """,
+
+    "30. Determine the regions with the highest frequency of deep-focus earthquakes (depth > 300 km).":
+    """
+        SELECT place,count(*) as deep FROM earth_quake WHERE depth_km > 300 GROUP BY place ORDER BY deep desc;
+
+    """
+
+
+}
+
+for question, query in queries.items():
+    print("\n" + "=" * 80)
+    print(question)
+    print("=" * 80)
+
+    try:
+        result = pd.read_sql(query, engine)
+        print(result.to_string(index=False))
+
+    except Exception as e:
+        print("Query failed:", e)
+
